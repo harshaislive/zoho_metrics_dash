@@ -1,0 +1,22 @@
+---
+description: Alwasy refer to this to understand our project architecture and arrangement
+globs: 
+alwaysApply: false
+---
+src/
+├── components/
+│   ├── layout/
+│   │   ├── Sidebar.tsx          # Left panel navigation
+│   │   └── Layout.tsx           # Main layout wrapper
+│   ├── search/
+│   │   ├── SearchBar.tsx        # Centered search component
+│   │   └── SearchResults.tsx    # Display search results
+│   ├── metrics/
+│   │   ├── MetricsGrid.tsx      # Horizontal flex container for metrics
+│   │   └── MetricCard.tsx       # Individual metric display
+│   └── tasks/
+│       ├── TaskList.tsx         # Paginated task list
+│       └── TaskItem.tsx         # Individual task row
+├── pages/
+│   ├── ProjectsReport.tsx       # Projects dashboard
+│   └── UserReport.tsx           # Users dashboard

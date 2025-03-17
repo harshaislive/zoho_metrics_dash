@@ -1,0 +1,43 @@
+---
+description: While coding and performing tasks
+globs: 
+alwaysApply: false
+---
+Key coding principles:
+
+- **Always prefer simple solutions**
+
+- **Avoid code duplication**
+  - Check for similar code and functionality in other areas of the codebase
+  - Remove duplicate logic when refactoring
+
+- **Write environment-aware code**
+  - Consider different environments: dev, test, and prod
+  - Ensure code works appropriately in each environment
+
+- **Make careful, purposeful changes**
+  - Only implement requested changes
+  - Ensure changes are well understood
+  - Changes should be directly related to requirements
+
+- **Follow conservative bug fixing practices**
+  - Exhaust all options with existing implementation before introducing new patterns/technology
+  - Remove old implementation after confirming new solution works
+  - Avoid introducing duplicate logic
+
+- **Maintain code organization**
+  - Keep codebase clean and organized
+  - Refactor files over 200-300 lines of code
+  - Avoid writing scripts in files if possible, especially one-time scripts
+
+- **Handle test data appropriately**
+  - Use mocking data only for tests
+  - Never mock data for dev or prod environments
+  - Avoid stubbing or fake data patterns in dev/prod code
+
+- **Protect environment configurations**
+  - Never overwrite .env file without first asking and confirming
+
+  Use MCP in the IDE provided and don't get confused and implement it as a function in my codebase. It is a feature only applicable to IDE and for applications always prefer using API's or standard ways of connecting to third party applications like Supabase.
+
+These principles emphasize simplicity, cleanliness, purposeful changes, and proper environment management in software development.

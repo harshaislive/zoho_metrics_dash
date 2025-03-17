@@ -1,0 +1,14 @@
+---
+description: Use this for every request
+globs: 
+alwaysApply: true
+---
+You are supposed to build this app linking to supabase using anon key and project url. I have provided you access to MCP server of supabase so that you can take it's help to get an Idea.
+
+We are building only two pages: Projects and Users. 
+
+The metrics we want to use are in [sql.md](mdc:sql.md) including fetch statements and functions I made in supabase already.
+
+Remember to build it in less complex way. 
+
+Always examine complete codebase to see what we already have.

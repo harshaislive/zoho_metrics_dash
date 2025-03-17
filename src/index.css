@@ -1,0 +1,35 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+@font-face {
+  font-family: 'ABC Arizona Flare Serif';
+  src: url('/fonts/ABCArizonaFlare-Regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'ABC Arizona Flare Sans';
+  src: url('/fonts/ABCArizonaFlareSans-Regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@layer base {
+  html {
+    @apply antialiased;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  body {
+    @apply bg-gray-50;
+    font-family: 'ABC Arizona Flare Sans', sans-serif;
+  }
+}
+
+h1, h2, h3, .font-serif {
+  font-family: 'ABC Arizona Flare Serif', serif;
+}
