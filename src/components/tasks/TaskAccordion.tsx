@@ -1,102 +1,29 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { TaskList } from './TaskList';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabaseClient';
 import LoadingSpinner from '../LoadingSpinner';
 import { FilterSection } from './FilterSection';
-import { DateRangeType } from './DateRangeSelector';
-
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
-
-export interface Task {
-  id: number;
-  name: string;
-  status: string;
-  priority: string;
-  start_date: string;
-  end_date: string;
-  percent_complete: number;
-  description?: string;
-  custom_status_name?: string;
-  custom_status_color?: string;
-}
-
-type FilterValue = 
-  | string  // for search
-  | string[] // for status
-  | DateRangeType // for dateRangeType
-  | { start: string | null; end: string | null }; // for custom dateRange
+import { Task, isIsoDateFormat, convertDateToIsoFormat } from '@/types/task';
+import { useTaskFilters } from '@/hooks/useTaskFilters';
 
 interface TaskAccordionProps {
   userId: string;
 }
-
-const getDateRangeFromType = (type: DateRangeType | null): { start: string | null; end: string | null } => {
-  if (!type) return { start: null, end: null };
-
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  const startOfWeek = new Date(today);
-  startOfWeek.setDate(today.getDate() - today.getDay());
-  
-  const startOfLastWeek = new Date(startOfWeek);
-  startOfLastWeek.setDate(startOfWeek.getDate() - 7);
-  
-  const endOfLastWeek = new Date(startOfWeek);
-  endOfLastWeek.setDate(endOfLastWeek.getDate() - 1);
-
-  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-  const startOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-  const endOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
-
-  const startOfYear = new Date(today.getFullYear(), 0, 1);
-  const startOfLastYear = new Date(today.getFullYear() - 1, 0, 1);
-  const endOfLastYear = new Date(today.getFullYear() - 1, 11, 31);
-
-  const formatDate = (date: Date) => date.toISOString().split('T')[0];
-
-  switch (type) {
-    case 'today':
-      return { start: formatDate(today), end: formatDate(today) };
-    case 'yesterday':
-      return { start: formatDate(yesterday), end: formatDate(yesterday) };
-    case 'this_week':
-      return { start: formatDate(startOfWeek), end: formatDate(today) };
-    case 'last_week':
-      return { start: formatDate(startOfLastWeek), end: formatDate(endOfLastWeek) };
-    case 'this_month':
-      return { start: formatDate(startOfMonth), end: formatDate(today) };
-    case 'last_month':
-      return { start: formatDate(startOfLastMonth), end: formatDate(endOfLastMonth) };
-    case 'this_year':
-      return { start: formatDate(startOfYear), end: formatDate(today) };
-    case 'last_year':
-      return { start: formatDate(startOfLastYear), end: formatDate(endOfLastYear) };
-    case 'custom':
-      return { start: null, end: null };
-    default:
-      return { start: null, end: null };
-  }
-};
 
 export function TaskAccordion({ userId }: TaskAccordionProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedTask, setExpandedTask] = useState<number | null>(null);
-  const [filters, setFilters] = useState({
-    search: '',
-    selectedStatuses: [] as string[],
-    dateRangeType: null as DateRangeType | null,
-    dateRange: {
-      start: null as string | null,
-      end: null as string | null,
-    },
-  });
+  
+  // Use our new task filters hook
+  const {
+    filters,
+    handleFilterChange,
+    availableStatuses,
+    availablePriorities,
+    tasksByStatus
+  } = useTaskFilters(tasks);
   
   const fetchTasks = async () => {
     try {
@@ -119,19 +46,73 @@ export function TaskAccordion({ userId }: TaskAccordionProps) {
         throw queryError;
       }
 
+      // Log sample data for debugging
+      if (tasksData && tasksData.length > 0) {
+        console.log('Sample User Task Data Format:', JSON.stringify(tasksData[0], null, 2));
+      }
+
       // Transform the data to match our Task interface
-      const transformedTasks = tasksData?.map(item => ({
-        id: item.data.id,
-        name: item.data.name,
-        status: item.data.status.name,
-        priority: item.data.priority,
-        start_date: item.data.start_date,
-        end_date: item.data.end_date,
-        percent_complete: parseInt(item.data.percent_complete),
-        description: item.data.description,
-        custom_status_name: item.data.status.name,
-        custom_status_color: item.data.status.color_code
-      })) || [];
+      const transformedTasks = tasksData?.map(item => {
+        // Log date formats for debugging
+        if (item.data.start_date || item.data.end_date) {
+          console.log('User Task Date Formats:', {
+            taskId: item.data.id,
+            rawStartDate: item.data.start_date,
+            rawEndDate: item.data.end_date,
+            startDateType: typeof item.data.start_date,
+            endDateType: typeof item.data.end_date
+          });
+        }
+
+        // Extract and normalize status
+        let status = 'Unknown';
+        if (item.data.status && typeof item.data.status === 'object' && 'name' in item.data.status) {
+          status = item.data.status.name || 'Unknown';
+        } else if (typeof item.data.status === 'string') {
+          status = item.data.status;
+        }
+        
+        // Extract and normalize priority
+        let priority = 'Normal';
+        if (item.data.priority && typeof item.data.priority === 'string') {
+          priority = item.data.priority;
+        }
+        
+        // Log status and priority for debugging
+        console.log('User Task Status and Priority:', {
+          taskId: item.data.id,
+          rawStatus: item.data.status,
+          normalizedStatus: status,
+          rawPriority: item.data.priority,
+          normalizedPriority: priority
+        });
+
+        const task = {
+          id: parseInt(String(item.data.id)),
+          name: item.data.name || 'Unnamed Task',
+          status: status,
+          priority: priority,
+          start_date: item.data.start_date || '',
+          end_date: item.data.end_date || '',
+          percent_complete: parseInt(String(item.data.percent_complete || '0')),
+          description: item.data.description || '',
+          custom_status_name: status,
+          custom_status_color: (item.data.status && typeof item.data.status === 'object' && 'color_code' in item.data.status) 
+            ? item.data.status.color_code || '#cccccc'
+            : '#cccccc'
+        };
+
+        // Make sure date strings are in ISO format for proper comparison
+        if (task.start_date && !isIsoDateFormat(task.start_date)) {
+          task.start_date = convertDateToIsoFormat(task.start_date);
+        }
+        
+        if (task.end_date && !isIsoDateFormat(task.end_date)) {
+          task.end_date = convertDateToIsoFormat(task.end_date);
+        }
+
+        return task;
+      }) || [];
 
       setTasks(transformedTasks);
     } catch (err) {
@@ -142,77 +123,11 @@ export function TaskAccordion({ userId }: TaskAccordionProps) {
     }
   };
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (userId) {
       fetchTasks();
     }
   }, [userId]);
-
-  const handleFilterChange = (
-    type: 'search' | 'status' | 'dateRangeType' | 'dateRange',
-    value: FilterValue
-  ) => {
-    setFilters((prev) => {
-      if (type === 'dateRangeType') {
-        const dateRangeType = value as DateRangeType;
-        return {
-          ...prev,
-          dateRangeType,
-          dateRange: dateRangeType === 'custom' ? prev.dateRange : getDateRangeFromType(dateRangeType),
-        };
-      }
-      return {
-        ...prev,
-        [type]: value,
-      };
-    });
-  };
-
-  const filteredTasks = useMemo(() => {
-    return tasks.filter((task) => {
-      // Search filter
-      const searchMatch =
-        !filters.search ||
-        task.name.toLowerCase().includes(filters.search.toLowerCase()) ||
-        (task.description?.toLowerCase() || '').includes(
-          filters.search.toLowerCase()
-        );
-
-      // Status filter
-      const statusMatch =
-        filters.selectedStatuses.length === 0 ||
-        filters.selectedStatuses.includes(task.status);
-
-      // Date filter
-      const dateRange = filters.dateRangeType === 'custom' 
-        ? filters.dateRange 
-        : getDateRangeFromType(filters.dateRangeType);
-
-      const startDate = dateRange.start ? new Date(dateRange.start) : null;
-      const endDate = dateRange.end ? new Date(dateRange.end) : null;
-      const taskStartDate = new Date(task.start_date);
-      const taskEndDate = new Date(task.end_date);
-
-      const dateMatch =
-        (!startDate || taskStartDate >= startDate) &&
-        (!endDate || taskEndDate <= endDate);
-
-      return searchMatch && statusMatch && dateMatch;
-    });
-  }, [tasks, filters]);
-
-  const availableStatuses = useMemo(() => {
-    return Array.from(new Set(tasks.map((task) => task.status)));
-  }, [tasks]);
-
-  const tasksByStatus = useMemo(() => {
-    return filteredTasks.reduce((acc, task) => {
-      const status = task.custom_status_name || task.status;
-      if (!acc[status]) acc[status] = [];
-      acc[status].push(task);
-      return acc;
-    }, {} as Record<string, Task[]>);
-  }, [filteredTasks]);
 
   if (loading) {
     return (
@@ -224,7 +139,7 @@ export function TaskAccordion({ userId }: TaskAccordionProps) {
 
   if (error) {
     return (
-      <div className="text-secondary-500 text-sm p-4 bg-secondary-50 rounded-lg">
+      <div className="text-red-500 text-sm p-4 bg-red-50 rounded-lg border border-red-100">
         {error}
       </div>
     );
@@ -232,7 +147,7 @@ export function TaskAccordion({ userId }: TaskAccordionProps) {
 
   if (!tasks.length) {
     return (
-      <div className="text-neutral-600 text-sm p-4 bg-neutral-50 rounded-lg">
+      <div className="text-neutral-600 text-sm p-4 bg-neutral-50 rounded-lg border border-neutral-100">
         No tasks found for this user.
       </div>
     );
@@ -243,6 +158,7 @@ export function TaskAccordion({ userId }: TaskAccordionProps) {
       <FilterSection
         filters={filters}
         availableStatuses={availableStatuses}
+        availablePriorities={availablePriorities}
         onFilterChange={handleFilterChange}
       />
       

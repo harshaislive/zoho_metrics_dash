@@ -1,5 +1,5 @@
 import React from 'react';
-import { Task } from './TaskAccordion';
+import { Task } from '@/types/task';
 import { ChevronDownIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 
 interface TaskItemProps {

@@ -2,45 +2,9 @@ import React, { useEffect, useState } from 'react';
 import LoadingSpinner from '../LoadingSpinner';
 import { TaskList } from '../tasks/TaskList';
 import { FilterSection } from '../tasks/FilterSection';
-import { DateRangeType } from '../tasks/DateRangeSelector';
 import { supabase } from '@/lib/supabaseClient';
-
-export interface Task {
-  id: number;
-  name: string;
-  status: string;
-  priority: string;
-  start_date: string;
-  end_date: string;
-  percent_complete: number;
-  description: string;
-  custom_status_name: string;
-  custom_status_color: string;
-}
-
-// Define interface for raw task data from Supabase
-// This interface is used for documentation purposes
-interface TaskData {
-  id: string;
-  name: string;
-  status?: {
-    name: string;
-    color_code: string;
-  };
-  priority?: string;
-  start_date?: string;
-  end_date?: string;
-  percent_complete?: string;
-  description?: string;
-  tasklist?: {
-    id: string;
-  };
-  link?: {
-    self?: {
-      url: string;
-    };
-  };
-}
+import { Task, isIsoDateFormat, convertDateToIsoFormat } from '@/types/task';
+import { useTaskFilters } from '@/hooks/useTaskFilters';
 
 interface ProjectTaskAccordionProps {
   projectId: string;
@@ -51,15 +15,15 @@ export const ProjectTaskAccordion: React.FC<ProjectTaskAccordionProps> = ({ proj
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedTask, setExpandedTask] = useState<number | null>(null);
-  const [filters, setFilters] = useState({
-    search: '',
-    selectedStatuses: [] as string[],
-    dateRangeType: null as DateRangeType,
-    dateRange: {
-      start: null as string | null,
-      end: null as string | null
-    }
-  });
+  
+  // Use our new task filters hook
+  const {
+    filters,
+    handleFilterChange,
+    availableStatuses,
+    availablePriorities,
+    tasksByStatus
+  } = useTaskFilters(tasks);
 
   const fetchProjectTasks = async () => {
     try {
@@ -115,80 +79,140 @@ export const ProjectTaskAccordion: React.FC<ProjectTaskAccordionProps> = ({ proj
   };
   
   // Helper function to transform task data
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const transformTasksData = (tasksData: unknown[]): Task[] => {
+    // Log sample data for debugging
+    if (tasksData.length > 0) {
+      console.log('Sample Task Data Format:', JSON.stringify(tasksData[0], null, 2));
+    }
+    
     return tasksData.map(rawTask => {
       // Handle different data structures with type assertions
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const taskData = (rawTask as any).data || 
-                       (rawTask as any).get_tasks_by_project_id || 
-                       rawTask;
+      // Create a typed interface for the taskData object
+      interface RawTaskData {
+        data?: { 
+          id: string | number;
+          name?: string;
+          status?: { name?: string; color_code?: string };
+          priority?: string;
+          start_date?: string;
+          end_date?: string;
+          percent_complete?: string | number;
+          description?: string;
+        };
+        get_tasks_by_project_id?: {
+          id: string | number;
+          name?: string;
+          status?: { name?: string; color_code?: string };
+          priority?: string;
+          start_date?: string;
+          end_date?: string;
+          percent_complete?: string | number;
+          description?: string;
+        };
+        id?: string | number;
+        name?: string;
+        status?: { name?: string; color_code?: string };
+        priority?: string;
+        start_date?: string;
+        end_date?: string;
+        percent_complete?: string | number;
+        description?: string;
+      }
+      
+      const typedRawTask = rawTask as RawTaskData;
+      
+      // Extract the task data from the appropriate property
+      const taskData = typedRawTask.data || 
+                       typedRawTask.get_tasks_by_project_id || 
+                       typedRawTask;
       
       if (!taskData || typeof taskData !== 'object' || !('id' in taskData)) {
         console.warn('Invalid task data structure:', rawTask);
         return null;
       }
       
-      return {
+      // Log date formats for debugging
+      if (taskData.start_date || taskData.end_date) {
+        console.log('Task Date Formats:', {
+          taskId: taskData.id,
+          rawStartDate: taskData.start_date,
+          rawEndDate: taskData.end_date,
+          startDateType: typeof taskData.start_date,
+          endDateType: typeof taskData.end_date
+        });
+      }
+      
+      // Extract and normalize status
+      let status = 'Unknown';
+      if (taskData.status && typeof taskData.status === 'object' && 'name' in taskData.status) {
+        status = taskData.status.name || 'Unknown';
+      } else if (typeof taskData.status === 'string') {
+        status = taskData.status;
+      }
+      
+      // Extract and normalize priority
+      let priority = 'Normal';
+      if (taskData.priority && typeof taskData.priority === 'string') {
+        priority = taskData.priority;
+      }
+      
+      // Log status and priority for debugging
+      console.log('Task Status and Priority:', {
+        taskId: taskData.id,
+        rawStatus: taskData.status,
+        normalizedStatus: status,
+        rawPriority: taskData.priority,
+        normalizedPriority: priority
+      });
+      
+      const task = {
         id: parseInt(String(taskData.id)),
         name: taskData.name || 'Unnamed Task',
-        status: taskData.status?.name || 'Unknown',
-        priority: taskData.priority || 'Normal',
+        status: status,
+        priority: priority,
         start_date: taskData.start_date || '',
         end_date: taskData.end_date || '',
         percent_complete: parseInt(String(taskData.percent_complete || '0')),
         description: taskData.description || '',
-        custom_status_name: taskData.status?.name || 'Unknown',
-        custom_status_color: taskData.status?.color_code || '#cccccc'
+        custom_status_name: status,
+        custom_status_color: (taskData.status && typeof taskData.status === 'object' && 'color_code' in taskData.status) 
+          ? taskData.status.color_code || '#cccccc'
+          : '#cccccc'
       };
+      
+      // Make sure date strings are in ISO format for proper comparison
+      if (task.start_date && !isIsoDateFormat(task.start_date)) {
+        task.start_date = convertDateToIsoFormat(task.start_date);
+      }
+      
+      if (task.end_date && !isIsoDateFormat(task.end_date)) {
+        task.end_date = convertDateToIsoFormat(task.end_date);
+      }
+      
+      return task;
     }).filter(Boolean) as Task[]; // Filter out any null values
   };
-
+  
   useEffect(() => {
     if (projectId) {
       fetchProjectTasks();
     }
   }, [projectId]);
 
-  const handleFilterChange = (
-    type: 'search' | 'status' | 'dateRangeType' | 'dateRange',
-    value: string | string[] | DateRangeType | { start: string | null; end: string | null }
-  ) => {
-    setFilters(prev => ({
-      ...prev,
-      [type === 'status' ? 'selectedStatuses' : type]: value
-    }));
-  };
-
-  // Filter tasks based on filters
-  const filteredTasks = tasks.filter(task => {
-    const matchesSearch = task.name.toLowerCase().includes(filters.search.toLowerCase());
-    const matchesStatus = filters.selectedStatuses.length === 0 || filters.selectedStatuses.includes(task.status);
-    const matchesDateRange = !filters.dateRange.start || !filters.dateRange.end || 
-      (new Date(task.start_date) >= new Date(filters.dateRange.start) && 
-       new Date(task.end_date) <= new Date(filters.dateRange.end));
-    
-    return matchesSearch && matchesStatus && matchesDateRange;
-  });
-
-  // Group tasks by status
-  const tasksByStatus = filteredTasks.reduce((acc, task) => {
-    if (!acc[task.status]) {
-      acc[task.status] = [];
-    }
-    acc[task.status].push(task);
-    return acc;
-  }, {} as Record<string, Task[]>);
-
   if (error) {
-    return <div className="text-red-500">Error: {error}</div>;
+    return (
+      <div className="text-red-500 text-sm p-4 bg-red-50 rounded-lg border border-red-100">
+        Error: {error}
+      </div>
+    );
   }
 
   return (
     <div className="space-y-4">
       <FilterSection
         filters={filters}
-        availableStatuses={Array.from(new Set(tasks.map(task => task.status)))}
+        availableStatuses={availableStatuses}
+        availablePriorities={availablePriorities}
         onFilterChange={handleFilterChange}
       />
       
@@ -197,7 +221,7 @@ export const ProjectTaskAccordion: React.FC<ProjectTaskAccordionProps> = ({ proj
           <LoadingSpinner />
         </div>
       ) : tasks.length === 0 ? (
-        <div className="text-center py-4 text-gray-500">
+        <div className="text-center py-4 text-gray-500 bg-neutral-50 rounded-lg border border-neutral-100 p-4">
           No tasks found for this project
         </div>
       ) : (

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Task } from './TaskAccordion';
+import { Task } from '@/types/task';
 import { TaskItem } from './TaskItem';
 import { ChevronDownIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
 
 export type DateRangeType =
@@ -50,6 +50,26 @@ export function DateRangeSelector({
     (option) => option.value === selectedRange
   )?.label;
 
+  // Log selected range for debugging
+  useEffect(() => {
+    console.log('DateRangeSelector state:', {
+      selectedRange,
+      customRange,
+      selectedLabel
+    });
+  }, [selectedRange, customRange, selectedLabel]);
+
+  const handleRangeChange = (range: DateRangeType) => {
+    console.log('Changing date range to:', range);
+    onRangeChange(range);
+    setIsOpen(false);
+  };
+
+  const handleCustomRangeChange = (range: DateRange) => {
+    console.log('Custom date range changed:', range);
+    onCustomRangeChange(range);
+  };
+
   return (
     <div className="relative">
       <button
@@ -68,10 +88,7 @@ export function DateRangeSelector({
             {dateRangeOptions.map((option) => (
               <button
                 key={option.value || 'all-time'}
-                onClick={() => {
-                  onRangeChange(option.value);
-                  setIsOpen(false);
-                }}
+                onClick={() => handleRangeChange(option.value)}
                 className={`w-full px-4 py-2 text-sm text-left hover:bg-neutral-50 ${
                   selectedRange === option.value
                     ? 'text-primary-700 bg-primary-50'
@@ -95,7 +112,7 @@ export function DateRangeSelector({
               type="date"
               value={customRange.start || ''}
               onChange={(e) =>
-                onCustomRangeChange({
+                handleCustomRangeChange({
                   ...customRange,
                   start: e.target.value || null,
                 })
@@ -111,7 +128,7 @@ export function DateRangeSelector({
               type="date"
               value={customRange.end || ''}
               onChange={(e) =>
-                onCustomRangeChange({
+                handleCustomRangeChange({
                   ...customRange,
                   end: e.target.value || null,
                 })
