@@ -7,6 +7,7 @@ import { formatNumber } from '@/utils/formatters';
 import { Metric, MetricStatus } from '@/types/zoho';
 import InfoPanel from '@/components/InfoPanel';
 import { ProjectTaskAccordion } from '@/components/projects/ProjectTaskAccordion';
+import { useProject, ProjectMetrics as ProjectMetricsType } from '../context/ProjectContext';
 
 interface ProjectMetrics {
   unplanned: {
@@ -98,9 +99,14 @@ export default function ProjectsReport() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [projects, setProjects] = useState<ProjectWithIndex[]>([]);
-  const [selectedProject, setSelectedProject] = useState<ProjectWithIndex | null>(null);
-  const [projectMetrics, setProjectMetrics] = useState<ProjectMetrics | null>(null);
+  const [selectedProjectLocal, setSelectedProjectLocal] = useState<ProjectWithIndex | null>(null);
+  const [projectMetricsLocal, setProjectMetricsLocal] = useState<ProjectMetrics | null>(null);
   const [query, setQuery] = useState('');
+  const { 
+    setSelectedProjectId, 
+    setSelectedProject, 
+    setProjectMetrics 
+  } = useProject();
 
   useEffect(() => {
     const loadProjects = async () => {
@@ -126,15 +132,21 @@ export default function ProjectsReport() {
 
   useEffect(() => {
     const loadProjectMetrics = async () => {
-      if (!selectedProject) {
+      if (!selectedProjectLocal) {
+        setProjectMetricsLocal(null);
+        setSelectedProjectId(null);
+        setSelectedProject(null);
         setProjectMetrics(null);
         return;
       }
 
       try {
         setLoading(true);
-        const metrics = await getAllProjectMetrics(selectedProject.id);
-        setProjectMetrics(metrics);
+        const metrics = await getAllProjectMetrics(selectedProjectLocal.id);
+        setProjectMetricsLocal(metrics);
+        setSelectedProjectId(selectedProjectLocal.id);
+        setSelectedProject(selectedProjectLocal);
+        setProjectMetrics(metrics as ProjectMetricsType);
         setLoading(false);
       } catch (err) {
         setError('Failed to load project metrics');
@@ -144,11 +156,11 @@ export default function ProjectsReport() {
     };
 
     loadProjectMetrics();
-  }, [selectedProject]);
+  }, [selectedProjectLocal, setSelectedProjectId, setSelectedProject, setProjectMetrics]);
 
   // Create metrics array for the MetricsGrid component
   const getMetrics = (): Metric[] => {
-    if (!projectMetrics) return [];
+    if (!projectMetricsLocal) return [];
 
     const getMetricStatus = (value: number, thresholds: { warning: number; danger: number }, isHigherBetter = false): MetricStatus => {
       if (isHigherBetter) {
@@ -165,42 +177,42 @@ export default function ProjectsReport() {
     return [
       {
         label: 'Unplanned Percentage',
-        value: parseFloat(formatNumber(projectMetrics.unplanned?.unplanned_percentage || 0)),
+        value: parseFloat(formatNumber(projectMetricsLocal.unplanned?.unplanned_percentage || 0)),
         unit: '%',
-        description: `${projectMetrics.unplanned?.unplanned_days || 0} days out of ${projectMetrics.unplanned?.total_project_days || 0} total days`,
+        description: `${projectMetricsLocal.unplanned?.unplanned_days || 0} days out of ${projectMetricsLocal.unplanned?.total_project_days || 0} total days`,
         status: getMetricStatus(
-          projectMetrics.unplanned?.unplanned_percentage || 0,
+          projectMetricsLocal.unplanned?.unplanned_percentage || 0,
           { warning: 10, danger: 20 }
         )
       },
       {
         label: 'Task Timeliness',
-        value: parseFloat(formatNumber(parseFloat(projectMetrics.timeliness?.timeliness_rate || '0'))),
+        value: parseFloat(formatNumber(parseFloat(projectMetricsLocal.timeliness?.timeliness_rate || '0'))),
         unit: '%',
-        description: `${projectMetrics.timeliness?.on_time_tasks || 0} on-time tasks out of ${projectMetrics.timeliness?.total_tasks || 0} total tasks`,
+        description: `${projectMetricsLocal.timeliness?.on_time_tasks || 0} on-time tasks out of ${projectMetricsLocal.timeliness?.total_tasks || 0} total tasks`,
         status: getMetricStatus(
-          parseFloat(projectMetrics.timeliness?.timeliness_rate || '0'),
+          parseFloat(projectMetricsLocal.timeliness?.timeliness_rate || '0'),
           { warning: 70, danger: 50 },
           true
         )
       },
       {
         label: 'Open Tasks Aging',
-        value: parseFloat(projectMetrics.aging?.average_aging || '0'),
+        value: parseFloat(projectMetricsLocal.aging?.average_aging || '0'),
         unit: ' days',
-        description: `${projectMetrics.aging?.total_overdue_tasks || 0} overdue tasks with ${projectMetrics.aging?.total_overdue_days || 0} total overdue days`,
+        description: `${projectMetricsLocal.aging?.total_overdue_tasks || 0} overdue tasks with ${projectMetricsLocal.aging?.total_overdue_days || 0} total overdue days`,
         status: getMetricStatus(
-          parseFloat(projectMetrics.aging?.average_aging || '0'),
+          parseFloat(projectMetricsLocal.aging?.average_aging || '0'),
           { warning: 5, danger: 10 }
         )
       },
       {
         label: 'Backlog Rate',
-        value: parseFloat(formatNumber(parseFloat(projectMetrics.backlog?.rotten_percentage || '0'))),
+        value: parseFloat(formatNumber(parseFloat(projectMetricsLocal.backlog?.rotten_percentage || '0'))),
         unit: '%',
-        description: `${projectMetrics.backlog?.rotten_tasks || 0} rotten tasks out of ${projectMetrics.backlog?.total_open_tasks || 0} open tasks`,
+        description: `${projectMetricsLocal.backlog?.rotten_tasks || 0} rotten tasks out of ${projectMetricsLocal.backlog?.total_open_tasks || 0} open tasks`,
         status: getMetricStatus(
-          parseFloat(projectMetrics.backlog?.rotten_percentage || '0'),
+          parseFloat(projectMetricsLocal.backlog?.rotten_percentage || '0'),
           { warning: 10, danger: 20 }
         )
       }
@@ -211,8 +223,8 @@ export default function ProjectsReport() {
   const ProjectSelector = (
     <EnhancedCombobox<ProjectWithIndex>
       items={projects as ProjectWithIndex[]}
-      selectedItem={selectedProject as ProjectWithIndex | null}
-      onChange={(project) => setSelectedProject(project)}
+      selectedItem={selectedProjectLocal as ProjectWithIndex | null}
+      onChange={(project) => setSelectedProjectLocal(project)}
       onQueryChange={setQuery}
       displayValue={(project: ProjectWithIndex) => project?.name || ''}
       placeholder="Select a project"
@@ -225,12 +237,12 @@ export default function ProjectsReport() {
   return (
     <DashboardLayout
       title="Project Metrics Dashboard"
-      subtitle={selectedProject ? `Viewing metrics for ${selectedProject.name}` : 'Select a project to view metrics'}
+      subtitle={selectedProjectLocal ? `Viewing metrics for ${selectedProjectLocal.name}` : 'Select a project to view metrics'}
       selector={ProjectSelector}
       loading={loading}
       error={error}
     >
-      {selectedProject && projectMetrics ? (
+      {selectedProjectLocal && projectMetricsLocal ? (
         <>
           <div className="mb-6">
             <div className="bg-white rounded-lg shadow-card border border-gray-100 p-6 transition-all duration-300 hover:shadow-card-hover">
@@ -238,19 +250,19 @@ export default function ProjectsReport() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="p-3 rounded-md bg-gray-50 border border-gray-100">
                   <p className="text-sm text-gray-500">Project Name</p>
-                  <p className="font-medium">{projectMetrics.unplanned?.project_name || selectedProject.name}</p>
+                  <p className="font-medium">{projectMetricsLocal.unplanned?.project_name || selectedProjectLocal.name}</p>
                 </div>
                 <div className="p-3 rounded-md bg-gray-50 border border-gray-100">
                   <p className="text-sm text-gray-500">Status</p>
-                  <p className="font-medium">{selectedProject.status}</p>
+                  <p className="font-medium">{selectedProjectLocal.status}</p>
                 </div>
                 <div className="p-3 rounded-md bg-gray-50 border border-gray-100">
                   <p className="text-sm text-gray-500">Start Date</p>
-                  <p className="font-medium">{projectMetrics.unplanned?.project_start_date || 'N/A'}</p>
+                  <p className="font-medium">{projectMetricsLocal.unplanned?.project_start_date || 'N/A'}</p>
                 </div>
                 <div className="p-3 rounded-md bg-gray-50 border border-gray-100">
                   <p className="text-sm text-gray-500">End Date</p>
-                  <p className="font-medium">{projectMetrics.unplanned?.project_end_date || 'N/A'}</p>
+                  <p className="font-medium">{projectMetricsLocal.unplanned?.project_end_date || 'N/A'}</p>
                 </div>
               </div>
             </div>
@@ -281,7 +293,7 @@ export default function ProjectsReport() {
           <div className="mt-6">
             <div className="bg-white rounded-lg shadow-card border border-gray-100 p-6 transition-all duration-300 hover:shadow-card-hover">
               <h2 className="text-xl font-semibold mb-4 text-primary-700">Project Tasks</h2>
-              <ProjectTaskAccordion projectId={selectedProject.id} />
+              <ProjectTaskAccordion projectId={selectedProjectLocal.id} />
             </div>
           </div>
         </>

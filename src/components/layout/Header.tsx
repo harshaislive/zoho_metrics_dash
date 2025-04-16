@@ -17,7 +17,7 @@ export default function Header() {
           <div className="flex">
             <div className="flex-shrink-0 flex items-center">
               <ChartBarIcon className="h-8 w-8 text-primary-500" />
-              <span className="ml-2 text-xl font-bold font-serif text-neutral-900">Zoho Metrics</span>
+              <span className="ml-2 text-xl font-bold font-serif text-neutral-900">Beforest Project Metrics</span>
             </div>
             <nav className="ml-8 flex space-x-8">
               {navItems.map((item) => {
@@ -40,7 +40,7 @@ export default function Header() {
           </div>
           <div className="flex items-center">
             <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-neutral-100 text-neutral-600">
-              Zoho Analytics
+              Beforest Analytics
             </span>
           </div>
         </div>

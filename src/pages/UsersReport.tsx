@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, getAllUsers, getAllUserMetrics, UtilizationRate, TaskTimeliness, AvgCompletionTime, TaskAging } from '@/services/metricsService';
+import { User as UserType, getAllUsers, getAllUserMetrics, UtilizationRate, TaskTimeliness, AvgCompletionTime, TaskAging } from '@/services/metricsService';
 import DashboardLayout from '@/components/DashboardLayout';
 import MetricsGrid from '@/components/MetricsGrid';
 import { MetricCard } from '@/components/MetricCard';
@@ -7,9 +7,10 @@ import EnhancedCombobox from '@/components/search/EnhancedCombobox';
 import { Metric, MetricStatus } from '@/types/zoho';
 import InfoPanel from '@/components/InfoPanel';
 import { TaskAccordion } from '@/components/tasks/TaskAccordion';
+import { useUser, UserMetrics as UserMetricsType } from '../context/UserContext';
 
 // Extend User to satisfy ComboboxItem constraint
-interface UserWithIndex extends User {
+interface UserWithIndex extends UserType {
   [key: string]: string | number | boolean | null | undefined;
 }
 
@@ -73,11 +74,17 @@ const userMetricsInfo = {
 
 export default function UsersReport() {
   const [users, setUsers] = useState<UserWithIndex[]>([]);
-  const [selectedUser, setSelectedUser] = useState<UserWithIndex | null>(null);
+  const [selectedUserLocal, setSelectedUserLocal] = useState<UserWithIndex | null>(null);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
-  const [metrics, setMetrics] = useState<UserMetrics | null>(null);
+  const [metricsLocal, setMetricsLocal] = useState<UserMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
+  
+  const { 
+    setSelectedUserId, 
+    setSelectedUser, 
+    setUserMetrics 
+  } = useUser();
 
   useEffect(() => {
     const loadUsers = async () => {
@@ -103,15 +110,30 @@ export default function UsersReport() {
 
   useEffect(() => {
     const loadUserMetrics = async () => {
-      if (!selectedUser) {
-        setMetrics(null);
+      if (!selectedUserLocal) {
+        setMetricsLocal(null);
+        setSelectedUserId(null);
+        setSelectedUser(null);
+        setUserMetrics(null);
         return;
       }
 
       try {
         setLoading(true);
-        const userMetrics = await getAllUserMetrics(selectedUser.full_name);
-        setMetrics(userMetrics);
+        const userMetrics = await getAllUserMetrics(selectedUserLocal.full_name);
+        setMetricsLocal(userMetrics);
+        
+        // Update the context
+        setSelectedUserId(selectedUserLocal.id);
+        setSelectedUser({
+          id: selectedUserLocal.id,
+          full_name: selectedUserLocal.full_name,
+          email: selectedUserLocal.email || '',
+          role: selectedUserLocal.role?.toString() || '',
+          status: 'Active' // Default status
+        });
+        setUserMetrics(userMetrics as unknown as UserMetricsType);
+        
         setLoading(false);
       } catch (err) {
         setError('Failed to load user metrics');
@@ -121,11 +143,11 @@ export default function UsersReport() {
     };
 
     loadUserMetrics();
-  }, [selectedUser]);
+  }, [selectedUserLocal, setSelectedUserId, setSelectedUser, setUserMetrics]);
 
   // Create metrics array for the MetricsGrid component
   const getMetrics = (): Metric[] => {
-    if (!metrics) return [];
+    if (!metricsLocal) return [];
 
     const getMetricStatus = (value: number, thresholds: { warning: number; danger: number }, isHigherBetter = false): MetricStatus => {
       if (isHigherBetter) {
@@ -142,43 +164,43 @@ export default function UsersReport() {
     return [
       {
         label: 'Utilization Rate',
-        value: metrics.utilization.utilization_rate,
+        value: metricsLocal.utilization.utilization_rate,
         unit: '%',
-        description: `${metrics.utilization.total_open_tasks - metrics.utilization.stale_tasks} active tasks out of ${metrics.utilization.total_open_tasks} open tasks`,
+        description: `${metricsLocal.utilization.total_open_tasks - metricsLocal.utilization.stale_tasks} active tasks out of ${metricsLocal.utilization.total_open_tasks} open tasks`,
         status: getMetricStatus(
-          metrics.utilization.utilization_rate,
+          metricsLocal.utilization.utilization_rate,
           { warning: 70, danger: 50 },
           true
         )
       },
       {
         label: 'Task Timeliness',
-        value: parseFloat(metrics.timeliness.timeliness_rate.replace('%', '')),
+        value: parseFloat(metricsLocal.timeliness.timeliness_rate.replace('%', '')),
         unit: '%',
-        description: `${metrics.timeliness.on_time_tasks} on-time tasks out of ${metrics.timeliness.total_tasks} total tasks`,
+        description: `${metricsLocal.timeliness.on_time_tasks} on-time tasks out of ${metricsLocal.timeliness.total_tasks} total tasks`,
         status: getMetricStatus(
-          parseFloat(metrics.timeliness.timeliness_rate.replace('%', '')),
+          parseFloat(metricsLocal.timeliness.timeliness_rate.replace('%', '')),
           { warning: 70, danger: 50 },
           true
         )
       },
       {
         label: 'Avg. Completion Time',
-        value: metrics.completion.avg_completion_time,
+        value: metricsLocal.completion.avg_completion_time,
         unit: ' days',
-        description: `Average time to complete ${metrics.completion.total_completed_tasks} tasks`,
+        description: `Average time to complete ${metricsLocal.completion.total_completed_tasks} tasks`,
         status: getMetricStatus(
-          metrics.completion.avg_completion_time,
+          metricsLocal.completion.avg_completion_time,
           { warning: 5, danger: 10 }
         )
       },
       {
         label: 'Task Aging',
-        value: metrics.aging.avg_days_overdue,
+        value: metricsLocal.aging.avg_days_overdue,
         unit: ' days',
-        description: `${metrics.aging.total_overdue_tasks} overdue tasks`,
+        description: `${metricsLocal.aging.total_overdue_tasks} overdue tasks`,
         status: getMetricStatus(
-          metrics.aging.avg_days_overdue,
+          metricsLocal.aging.avg_days_overdue,
           { warning: 5, danger: 10 }
         )
       }
@@ -189,8 +211,8 @@ export default function UsersReport() {
   const UserSelector = (
     <EnhancedCombobox<UserWithIndex>
       items={users}
-      selectedItem={selectedUser}
-      onChange={setSelectedUser}
+      selectedItem={selectedUserLocal}
+      onChange={setSelectedUserLocal}
       onQueryChange={setQuery}
       displayValue={(user: UserWithIndex) => user?.full_name || ''}
       placeholder="Select a user"
@@ -203,12 +225,12 @@ export default function UsersReport() {
   return (
     <DashboardLayout
       title="User Metrics Dashboard"
-      subtitle={selectedUser ? `Viewing metrics for ${selectedUser.full_name}` : 'Select a user to view metrics'}
+      subtitle={selectedUserLocal ? `Viewing metrics for ${selectedUserLocal.full_name}` : 'Select a user to view metrics'}
       selector={UserSelector}
       loading={loading}
       error={error}
     >
-      {selectedUser && metrics ? (
+      {selectedUserLocal && metricsLocal ? (
         <>
           <div className="mb-6">
             <div className="bg-white rounded-lg shadow-card border border-gray-100 p-6 transition-all duration-300 hover:shadow-card-hover">
@@ -216,11 +238,11 @@ export default function UsersReport() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="p-3 rounded-md bg-gray-50 border border-gray-100">
                   <p className="text-sm text-gray-500">Full Name</p>
-                  <p className="font-medium">{selectedUser.full_name}</p>
+                  <p className="font-medium">{selectedUserLocal.full_name}</p>
                 </div>
                 <div className="p-3 rounded-md bg-gray-50 border border-gray-100">
                   <p className="text-sm text-gray-500">Email</p>
-                  <p className="font-medium">{selectedUser.email || 'N/A'}</p>
+                  <p className="font-medium">{selectedUserLocal.email || 'N/A'}</p>
                 </div>
               </div>
             </div>
@@ -243,7 +265,7 @@ export default function UsersReport() {
           <div className="mt-8">
             <div className="bg-white rounded-lg shadow-card border border-gray-100 p-6 transition-all duration-300 hover:shadow-card-hover">
               <h2 className="text-xl font-semibold mb-4 text-primary-700">User Tasks</h2>
-              <TaskAccordion userId={selectedUser.id} />
+              <TaskAccordion userId={selectedUserLocal.id} />
             </div>
           </div>
         </>
